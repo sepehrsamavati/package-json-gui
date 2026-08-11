@@ -1,0 +1,1 @@
+let e=require("electron");e.contextBridge.exposeInMainWorld(`ipcApi`,{getOsInfo:()=>e.ipcRenderer.invoke(`getOsInfo`),getProjects:()=>e.ipcRenderer.invoke(`getProjects`),createProject:(t,n)=>e.ipcRenderer.invoke(`createProject`,t,n)});
