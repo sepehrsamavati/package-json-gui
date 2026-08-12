@@ -23,9 +23,25 @@ export const createDatabase = (): DatabaseInstance => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       path TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'Web client',
+      structure TEXT NOT NULL DEFAULT 'Single Repo',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `)
+
+  // Run alter table queries in try-catch to ensure backward compatibility
+  // with databases created under the older schema
+  try {
+    db.exec(`ALTER TABLE projects ADD COLUMN type TEXT NOT NULL DEFAULT 'Web client';`)
+  } catch {
+    // Column already exists or error ignored
+  }
+
+  try {
+    db.exec(`ALTER TABLE projects ADD COLUMN structure TEXT NOT NULL DEFAULT 'Single Repo';`)
+  } catch {
+    // Column already exists or error ignored
+  }
 
   return {
     getDb: () => db,

@@ -5,6 +5,9 @@ import { ThemeProvider, createTheme } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 
 const theme = createTheme({
+  shape: {
+    borderRadius: 16,
+  },
   palette: {
     mode: 'dark',
     primary: {
@@ -12,6 +15,10 @@ const theme = createTheme({
     },
     secondary: {
       main: '#f48fb1',
+    },
+    background: {
+      default: '#0a192f',
+      paper: '#112240',
     },
   },
 })
