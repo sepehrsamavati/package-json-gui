@@ -2,6 +2,8 @@ export type Project = {
   id: number
   name: string
   path: string
+  type: string
+  structure: string
   createdAt: string
 }
 
@@ -15,7 +17,8 @@ export type OsInfo = {
 export type IpcApi = {
   getOsInfo: () => Promise<OsInfo>
   getProjects: () => Promise<readonly Project[]>
-  createProject: (name: string, path: string) => Promise<Project>
+  createProject: (name: string, path: string, type?: string, structure?: string) => Promise<Project>
+  updateProject: (id: number, type: string, structure: string) => Promise<Project>
 }
 
 // Extend global Window interface securely

@@ -13,7 +13,11 @@ export const registerIpcHandlers = (container: AppContainer): void => {
     return projectService.getAll()
   })
 
-  ipcMain.handle('createProject', async (_event, name: string, path: string) => {
-    return projectService.create(name, path)
+  ipcMain.handle('createProject', async (_event, name: string, path: string, type?: string, structure?: string) => {
+    return projectService.create(name, path, type, structure)
+  })
+
+  ipcMain.handle('updateProject', async (_event, id: number, type: string, structure: string) => {
+    return projectService.update(id, type, structure)
   })
 }
