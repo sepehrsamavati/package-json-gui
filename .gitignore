@@ -145,5 +145,6 @@ vite.config.ts.timestamp-*
 # Electron / Vite Build Outputs
 dist/
 dist-electron/
+dist-packaged/
 release/
 out/
