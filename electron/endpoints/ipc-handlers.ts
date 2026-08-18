@@ -4,6 +4,7 @@ import { AppContainer } from '../di.js'
 export const registerIpcHandlers = (container: AppContainer): void => {
   const osService = container.resolve('osService')
   const projectService = container.resolve('projectService')
+  const dependencyService = container.resolve('dependencyService')
 
   ipcMain.handle('getOsInfo', async () => {
     return osService.getOsInfo()
@@ -19,5 +20,13 @@ export const registerIpcHandlers = (container: AppContainer): void => {
 
   ipcMain.handle('updateProject', async (_event, id: number, type: string, structure: string) => {
     return projectService.update(id, type, structure)
+  })
+
+  ipcMain.handle('detectPackages', async (_event, projectPath: string) => {
+    return dependencyService.detectPackages(projectPath)
+  })
+
+  ipcMain.handle('getDependencies', async (_event, packageJsonPath: string) => {
+    return dependencyService.getDependencies(packageJsonPath)
   })
 }

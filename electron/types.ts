@@ -1,3 +1,7 @@
+import { DetectedPackage, DetectionResult, DependencyItem, DependencyListResult } from './apps/dependency-service.js'
+
+export type { DetectedPackage, DetectionResult, DependencyItem, DependencyListResult }
+
 export type Project = {
   id: number
   name: string
@@ -19,6 +23,8 @@ export type IpcApi = {
   getProjects: () => Promise<readonly Project[]>
   createProject: (name: string, path: string, type?: string, structure?: string) => Promise<Project>
   updateProject: (id: number, type: string, structure: string) => Promise<Project>
+  detectPackages: (projectPath: string) => Promise<DetectionResult>
+  getDependencies: (packageJsonPath: string) => Promise<DependencyListResult>
 }
 
 // Extend global Window interface securely
