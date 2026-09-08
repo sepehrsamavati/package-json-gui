@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Container,
   Typography,
@@ -75,6 +75,8 @@ function App() {
   const [dependencyResult, setDependencyResult] = useState<DependencyListResult | null>(null)
   const [depFilter, setDepFilter] = useState<string>('')
   const [depSearch, setDepSearch] = useState<string>('')
+  const [depGroupMode, setDepGroupMode] = useState<'grouped' | 'flat'>('grouped')
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const loadData = async () => {
@@ -400,6 +402,100 @@ function App() {
       : true
     return matchesFilter && matchesSearch
   }) || []
+
+  // Grouping logic for scope (@scope/*) and prefix (prefix-*)
+  type DepGroup = {
+    groupName: string
+    isGroup: boolean
+    items: typeof filteredDependencies
+  }
+
+  const groupDependencies = (deps: typeof filteredDependencies): DepGroup[] => {
+    if (depGroupMode === 'flat') {
+      return [{ groupName: 'All Dependencies', isGroup: false, items: deps }]
+    }
+
+    // 1. First pass: group scoped packages (@scope/package) -> groupName "@scope/*"
+    const scopeGroups: Record<string, typeof filteredDependencies> = {}
+    const nonScoped: typeof filteredDependencies = []
+
+    for (const dep of deps) {
+      if (dep.name.startsWith('@') && dep.name.includes('/')) {
+        const scope = dep.name.split('/')[0] + '/*'
+        if (!scopeGroups[scope]) {
+          scopeGroups[scope] = []
+        }
+        scopeGroups[scope].push(dep)
+      } else {
+        nonScoped.push(dep)
+      }
+    }
+
+    // 2. Second pass: prefix groups for non-scoped packages (e.g., fastify-plugin, fastify-cors -> fastify-*)
+    // Extract candidate prefixes (first word before hyphen)
+    const prefixMap: Record<string, typeof filteredDependencies> = {}
+    const ungrouped: typeof filteredDependencies = []
+
+    for (const dep of nonScoped) {
+      if (dep.name.includes('-')) {
+        const prefix = dep.name.split('-')[0] + '-*'
+        if (!prefixMap[prefix]) {
+          prefixMap[prefix] = []
+        }
+        prefixMap[prefix].push(dep)
+      } else {
+        ungrouped.push(dep)
+      }
+    }
+
+    // Convert to DepGroup list
+    const resultGroups: DepGroup[] = []
+
+    // Add scope groups
+    const sortedScopes = Object.keys(scopeGroups).sort()
+    for (const scope of sortedScopes) {
+      resultGroups.push({
+        groupName: scope,
+        isGroup: true,
+        items: scopeGroups[scope],
+      })
+    }
+
+    // Add prefix groups (only if 2 or more packages share prefix, otherwise push back to ungrouped)
+    const sortedPrefixes = Object.keys(prefixMap).sort()
+    for (const prefix of sortedPrefixes) {
+      const items = prefixMap[prefix]
+      if (items.length >= 2) {
+        resultGroups.push({
+          groupName: prefix,
+          isGroup: true,
+          items,
+        })
+      } else {
+        ungrouped.push(...items)
+      }
+    }
+
+    // Sort ungrouped packages alphabetically
+    ungrouped.sort((a, b) => a.name.localeCompare(b.name))
+
+    if (ungrouped.length > 0) {
+      resultGroups.push({
+        groupName: 'Other Packages',
+        isGroup: false,
+        items: ungrouped,
+      })
+    }
+
+    return resultGroups
+  }
+
+  const toggleGroupCollapse = (groupName: string) => {
+    setCollapsedGroups((prev) => ({
+      ...prev,
+      [groupName]: !prev[groupName],
+    }))
+  }
 
   return (
     <Box sx={getContainerStyles()}>
@@ -1010,202 +1106,343 @@ function App() {
                         <MenuItem value="optionalDependencies">optionalDependencies</MenuItem>
                       </Select>
                     </FormControl>
+
+                    <ToggleButtonGroup
+                      value={depGroupMode}
+                      exclusive
+                      onChange={(_e, val) => val && setDepGroupMode(val)}
+                      aria-label="dependency grouping mode"
+                      size="small"
+                      sx={{
+                        border:
+                          styleMode === 'glassy'
+                            ? '1px solid rgba(255, 255, 255, 0.12)'
+                            : '1px solid #112240',
+                        '& .MuiToggleButton-root': {
+                          px: 1.5,
+                          py: 0.5,
+                          fontSize: '0.8rem',
+                          color: 'text.secondary',
+                          border: 'none',
+                          '&.Mui-selected': {
+                            color: '#90caf9',
+                            backgroundColor:
+                              styleMode === 'glassy' ? 'rgba(144, 202, 249, 0.15)' : '#112240',
+                          },
+                        },
+                      }}
+                    >
+                      <ToggleButton value="grouped">🏷️ Categorized</ToggleButton>
+                      <ToggleButton value="flat">📋 Flat</ToggleButton>
+                    </ToggleButtonGroup>
                   </Box>
 
                   {/* Dependency Listing Table */}
                   {dependencyResult && (
                     <Box>
-                      <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 1 }}>
-                        Showing {filteredDependencies.length} dependencies for{' '}
-                        <strong>{dependencyResult.packageName}</strong> (v
-                        {dependencyResult.packageVersion})
-                      </Typography>
+                      {(() => {
+                        const groups = groupDependencies(filteredDependencies)
 
-                      <TableContainer
-                        component={Paper}
-                        elevation={0}
-                        sx={{
-                          backgroundColor:
-                            styleMode === 'glassy' ? 'rgba(0, 0, 0, 0.2)' : 'transparent',
-                          border:
-                            styleMode === 'glassy'
-                              ? '1px solid rgba(255, 255, 255, 0.08)'
-                              : '1px solid rgba(255, 255, 255, 0.15)',
-                          borderRadius: styleMode === 'glassy' ? undefined : 0,
-                          maxHeight: 400,
-                        }}
-                      >
-                        <Table stickyHeader size="small" aria-label="dependencies list table">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell
-                                sx={{
-                                  backgroundColor:
-                                    styleMode === 'glassy' ? '#0d2136' : '#112240',
-                                  fontWeight: 'bold',
-                                  color: '#90caf9',
-                                  fontSize: '0.9rem',
-                                }}
-                              >
-                                Name & Version (Primary)
-                              </TableCell>
-                              <TableCell
-                                sx={{
-                                  backgroundColor:
-                                    styleMode === 'glassy' ? '#0d2136' : '#112240',
-                                  fontWeight: 'bold',
-                                  color: 'text.secondary',
-                                  fontSize: '0.8rem',
-                                }}
-                              >
-                                Other Info (Limited View)
-                              </TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {filteredDependencies.length > 0 ? (
-                              filteredDependencies.map((dep) => (
-                                <TableRow
-                                  key={dep.name}
-                                  sx={{
-                                    '&:hover': {
-                                      backgroundColor:
-                                        styleMode === 'glassy'
-                                          ? 'rgba(255, 255, 255, 0.05)'
-                                          : 'rgba(255, 255, 255, 0.02)',
-                                    },
-                                  }}
-                                >
-                                  {/* Primary View: Name and Version */}
-                                  <TableCell sx={{ py: 1.5, verticalAlign: 'top', minWidth: 220 }}>
-                                    <Box
+                        return (
+                          <>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                mb: 1,
+                              }}
+                            >
+                              <Typography variant="subtitle2" sx={{ color: 'text.secondary' }}>
+                                Showing {filteredDependencies.length} dependencies for{' '}
+                                <strong>{dependencyResult.packageName}</strong> (v
+                                {dependencyResult.packageVersion})
+                              </Typography>
+                              {depGroupMode === 'grouped' && (
+                                <Typography variant="caption" sx={{ color: '#90caf9' }}>
+                                  {groups.length} categories
+                                </Typography>
+                              )}
+                            </Box>
+
+                            <TableContainer
+                              component={Paper}
+                              elevation={0}
+                              sx={{
+                                backgroundColor:
+                                  styleMode === 'glassy' ? 'rgba(0, 0, 0, 0.2)' : 'transparent',
+                                border:
+                                  styleMode === 'glassy'
+                                    ? '1px solid rgba(255, 255, 255, 0.08)'
+                                    : '1px solid rgba(255, 255, 255, 0.15)',
+                                borderRadius: styleMode === 'glassy' ? undefined : 0,
+                                maxHeight: 420,
+                              }}
+                            >
+                              <Table stickyHeader size="small" aria-label="dependencies list table">
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell
                                       sx={{
-                                        display: 'flex',
-                                        alignItems: 'baseline',
-                                        gap: 1,
-                                        flexWrap: 'wrap',
+                                        backgroundColor:
+                                          styleMode === 'glassy' ? '#0d2136' : '#112240',
+                                        fontWeight: 'bold',
+                                        color: '#90caf9',
+                                        fontSize: '0.9rem',
                                       }}
                                     >
-                                      <Typography
-                                        variant="subtitle1"
-                                        sx={{
-                                          fontWeight: 700,
-                                          color: '#ffffff',
-                                          fontFamily: 'monospace',
-                                          fontSize: '0.95rem',
-                                        }}
-                                      >
-                                        {dep.name}
-                                      </Typography>
-                                      <Typography
-                                        variant="body2"
-                                        sx={{
-                                          color: '#90caf9',
-                                          fontWeight: 600,
-                                          fontFamily: 'monospace',
-                                        }}
-                                      >
-                                        {dep.version}
-                                      </Typography>
-                                    </Box>
-                                    {dep.resolvedVersion && dep.resolvedVersion !== dep.version && (
-                                      <Typography
-                                        variant="caption"
-                                        sx={{ color: 'text.secondary', display: 'block', mt: 0.2 }}
-                                      >
-                                        lockfile: {dep.resolvedVersion}
-                                      </Typography>
-                                    )}
-                                  </TableCell>
-
-                                  {/* Secondary View: Compact/Limited Info */}
-                                  <TableCell sx={{ py: 1.5, verticalAlign: 'top' }}>
-                                    <Box
+                                      Name & Version (Primary)
+                                    </TableCell>
+                                    <TableCell
                                       sx={{
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: 0.5,
+                                        backgroundColor:
+                                          styleMode === 'glassy' ? '#0d2136' : '#112240',
+                                        fontWeight: 'bold',
+                                        color: 'text.secondary',
+                                        fontSize: '0.8rem',
                                       }}
                                     >
-                                      <Box
-                                        sx={{
-                                          display: 'flex',
-                                          gap: 1,
-                                          alignItems: 'center',
-                                          flexWrap: 'wrap',
-                                        }}
-                                      >
-                                        <Chip
-                                          label={dep.type}
-                                          size="small"
-                                          sx={{
-                                            height: 18,
-                                            fontSize: '0.65rem',
-                                            backgroundColor:
-                                              dep.type === 'dependencies'
-                                                ? 'rgba(144, 202, 249, 0.15)'
-                                                : dep.type === 'devDependencies'
-                                                  ? 'rgba(244, 143, 177, 0.15)'
-                                                  : 'rgba(255, 224, 130, 0.15)',
-                                            color:
-                                              dep.type === 'dependencies'
-                                                ? '#90caf9'
-                                                : dep.type === 'devDependencies'
-                                                  ? '#f48fb1'
-                                                  : '#ffe082',
-                                            borderRadius:
-                                              styleMode === 'glassy' ? undefined : 0,
-                                          }}
-                                        />
-                                        {dep.license && (
-                                          <Chip
-                                            label={`📄 ${dep.license}`}
-                                            size="small"
-                                            sx={{
-                                              height: 18,
-                                              fontSize: '0.65rem',
-                                              backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                                              color: 'text.secondary',
-                                              borderRadius:
-                                                styleMode === 'glassy' ? undefined : 0,
-                                            }}
-                                          />
-                                        )}
-                                      </Box>
-
-                                      {dep.description && (
-                                        <Typography
-                                          variant="caption"
-                                          sx={{
-                                            color: 'text.secondary',
-                                            display: '-webkit-box',
-                                            WebkitLineClamp: 2,
-                                            WebkitBoxOrient: 'vertical',
-                                            overflow: 'hidden',
-                                            fontSize: '0.75rem',
-                                            lineHeight: 1.3,
-                                            mt: 0.3,
-                                          }}
-                                        >
-                                          {dep.description}
+                                      Other Info (Limited View)
+                                    </TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {filteredDependencies.length === 0 ? (
+                                    <TableRow>
+                                      <TableCell colSpan={2} align="center" sx={{ py: 4 }}>
+                                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                          No dependencies match the current search or filter.
                                         </Typography>
-                                      )}
-                                    </Box>
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            ) : (
-                              <TableRow>
-                                <TableCell colSpan={2} align="center" sx={{ py: 4 }}>
-                                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                    No dependencies match the current search or filter.
-                                  </Typography>
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
+                                      </TableCell>
+                                    </TableRow>
+                                  ) : (
+                                    groups.map((group) => {
+                                      const isCollapsed = collapsedGroups[group.groupName]
+
+                                      return (
+                                        <React.Fragment key={group.groupName}>
+                                          {/* Group Header Row if in Grouped Mode */}
+                                          {depGroupMode === 'grouped' && (
+                                            <TableRow
+                                              onClick={() => toggleGroupCollapse(group.groupName)}
+                                              sx={{
+                                                backgroundColor:
+                                                  styleMode === 'glassy'
+                                                    ? 'rgba(144, 202, 249, 0.08)'
+                                                    : 'rgba(255, 255, 255, 0.04)',
+                                                cursor: 'pointer',
+                                                '&:hover': {
+                                                  backgroundColor:
+                                                    styleMode === 'glassy'
+                                                      ? 'rgba(144, 202, 249, 0.15)'
+                                                      : 'rgba(255, 255, 255, 0.08)',
+                                                },
+                                              }}
+                                            >
+                                              <TableCell colSpan={2} sx={{ py: 1, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                                                <Box
+                                                  sx={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                  }}
+                                                >
+                                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                                                      {isCollapsed ? '▶' : '▼'}
+                                                    </Typography>
+                                                    <Typography
+                                                      variant="subtitle2"
+                                                      sx={{
+                                                        fontWeight: 700,
+                                                        color: group.isGroup ? '#f48fb1' : '#90caf9',
+                                                        fontFamily: 'monospace',
+                                                        fontSize: '0.9rem',
+                                                      }}
+                                                    >
+                                                      {group.isGroup ? `📁 ${group.groupName}` : group.groupName}
+                                                    </Typography>
+                                                  </Box>
+                                                  <Chip
+                                                    label={`${group.items.length} ${group.items.length === 1 ? 'package' : 'packages'}`}
+                                                    size="small"
+                                                    sx={{
+                                                      height: 20,
+                                                      fontSize: '0.7rem',
+                                                      backgroundColor: group.isGroup
+                                                        ? 'rgba(244, 143, 177, 0.15)'
+                                                        : 'rgba(144, 202, 249, 0.15)',
+                                                      color: group.isGroup ? '#f48fb1' : '#90caf9',
+                                                      border: '1px solid currentColor',
+                                                    }}
+                                                  />
+                                                </Box>
+                                              </TableCell>
+                                            </TableRow>
+                                          )}
+
+                                          {/* Group Item Rows (Hidden if Collapsed) */}
+                                          {!isCollapsed &&
+                                            group.items.map((dep) => (
+                                              <TableRow
+                                                key={dep.name}
+                                                sx={{
+                                                  '&:hover': {
+                                                    backgroundColor:
+                                                      styleMode === 'glassy'
+                                                        ? 'rgba(255, 255, 255, 0.05)'
+                                                        : 'rgba(255, 255, 255, 0.02)',
+                                                  },
+                                                }}
+                                              >
+                                                {/* Primary View: Name and Version */}
+                                                <TableCell
+                                                  sx={{
+                                                    py: 1.2,
+                                                    verticalAlign: 'top',
+                                                    minWidth: 220,
+                                                    paddingInlineStart:
+                                                      depGroupMode === 'grouped' && group.isGroup
+                                                        ? 4
+                                                        : 2,
+                                                  }}
+                                                >
+                                                  <Box
+                                                    sx={{
+                                                      display: 'flex',
+                                                      alignItems: 'baseline',
+                                                      gap: 1,
+                                                      flexWrap: 'wrap',
+                                                    }}
+                                                  >
+                                                    <Typography
+                                                      variant="subtitle1"
+                                                      sx={{
+                                                        fontWeight: 700,
+                                                        color: '#ffffff',
+                                                        fontFamily: 'monospace',
+                                                        fontSize: '0.95rem',
+                                                      }}
+                                                    >
+                                                      {dep.name}
+                                                    </Typography>
+                                                    <Typography
+                                                      variant="body2"
+                                                      sx={{
+                                                        color: '#90caf9',
+                                                        fontWeight: 600,
+                                                        fontFamily: 'monospace',
+                                                      }}
+                                                    >
+                                                      {dep.version}
+                                                    </Typography>
+                                                  </Box>
+                                                  {dep.resolvedVersion &&
+                                                    dep.resolvedVersion !== dep.version && (
+                                                      <Typography
+                                                        variant="caption"
+                                                        sx={{
+                                                          color: 'text.secondary',
+                                                          display: 'block',
+                                                          mt: 0.2,
+                                                        }}
+                                                      >
+                                                        lockfile: {dep.resolvedVersion}
+                                                      </Typography>
+                                                    )}
+                                                </TableCell>
+
+                                                {/* Secondary View: Compact/Limited Info */}
+                                                <TableCell sx={{ py: 1.2, verticalAlign: 'top' }}>
+                                                  <Box
+                                                    sx={{
+                                                      display: 'flex',
+                                                      flexDirection: 'column',
+                                                      gap: 0.5,
+                                                    }}
+                                                  >
+                                                    <Box
+                                                      sx={{
+                                                        display: 'flex',
+                                                        gap: 1,
+                                                        alignItems: 'center',
+                                                        flexWrap: 'wrap',
+                                                      }}
+                                                    >
+                                                      <Chip
+                                                        label={dep.type}
+                                                        size="small"
+                                                        sx={{
+                                                          height: 18,
+                                                          fontSize: '0.65rem',
+                                                          backgroundColor:
+                                                            dep.type === 'dependencies'
+                                                              ? 'rgba(144, 202, 249, 0.15)'
+                                                              : dep.type === 'devDependencies'
+                                                                ? 'rgba(244, 143, 177, 0.15)'
+                                                                : 'rgba(255, 224, 130, 0.15)',
+                                                          color:
+                                                            dep.type === 'dependencies'
+                                                              ? '#90caf9'
+                                                              : dep.type === 'devDependencies'
+                                                                ? '#f48fb1'
+                                                                : '#ffe082',
+                                                          borderRadius:
+                                                            styleMode === 'glassy'
+                                                              ? undefined
+                                                              : 0,
+                                                        }}
+                                                      />
+                                                      {dep.license && (
+                                                        <Chip
+                                                          label={`📄 ${dep.license}`}
+                                                          size="small"
+                                                          sx={{
+                                                            height: 18,
+                                                            fontSize: '0.65rem',
+                                                            backgroundColor:
+                                                              'rgba(255, 255, 255, 0.08)',
+                                                            color: 'text.secondary',
+                                                            borderRadius:
+                                                              styleMode === 'glassy'
+                                                                ? undefined
+                                                                : 0,
+                                                          }}
+                                                        />
+                                                      )}
+                                                    </Box>
+
+                                                    {dep.description && (
+                                                      <Typography
+                                                        variant="caption"
+                                                        sx={{
+                                                          color: 'text.secondary',
+                                                          display: '-webkit-box',
+                                                          WebkitLineClamp: 2,
+                                                          WebkitBoxOrient: 'vertical',
+                                                          overflow: 'hidden',
+                                                          fontSize: '0.75rem',
+                                                          lineHeight: 1.3,
+                                                          mt: 0.3,
+                                                        }}
+                                                      >
+                                                        {dep.description}
+                                                      </Typography>
+                                                    )}
+                                                  </Box>
+                                                </TableCell>
+                                              </TableRow>
+                                            ))}
+                                        </React.Fragment>
+                                      )
+                                    })
+                                  )}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          </>
+                        )
+                      })()}
                     </Box>
                   )}
                 </Box>
