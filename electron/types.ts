@@ -25,6 +25,7 @@ export type IpcApi = {
   updateProject: (id: number, type: string, structure: string) => Promise<Project>
   detectPackages: (projectPath: string) => Promise<DetectionResult>
   getDependencies: (packageJsonPath: string) => Promise<DependencyListResult>
+  selectFolder: () => Promise<string | null>
 }
 
 // Extend global Window interface securely

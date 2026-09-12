@@ -267,6 +267,31 @@ function App() {
     }
   }
 
+  const handleSelectFolder = async () => {
+    if (window.ipcApi) {
+      try {
+        const selectedPath = await window.ipcApi.selectFolder()
+        if (selectedPath) {
+          setProjectPath(selectedPath)
+          if (!projectName) {
+            const parts = selectedPath.split(/[/\\]/).filter(Boolean)
+            if (parts.length > 0) {
+              setProjectName(parts[parts.length - 1])
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error selecting folder:', error)
+      }
+    } else {
+      const mockPath = '/users/jules/projects/my-selected-app'
+      setProjectPath(mockPath)
+      if (!projectName) {
+        setProjectName('my-selected-app')
+      }
+    }
+  }
+
   const handleAddProject = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!projectName || !projectPath) return
@@ -652,20 +677,36 @@ function App() {
                     },
                   }}
                 />
-                <TextField
-                  label="Project Path"
-                  variant="outlined"
-                  size="small"
-                  fullWidth
-                  required
-                  value={projectPath}
-                  onChange={(e) => setProjectPath(e.target.value)}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <TextField
+                    label="Project Path"
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    required
+                    value={projectPath}
+                    onChange={(e) => setProjectPath(e.target.value)}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: styleMode === 'glassy' ? undefined : 0,
+                      },
+                    }}
+                  />
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleSelectFolder}
+                    sx={{
+                      whiteSpace: 'nowrap',
+                      height: 40,
+                      px: 2,
                       borderRadius: styleMode === 'glassy' ? undefined : 0,
-                    },
-                  }}
-                />
+                      textTransform: 'none',
+                    }}
+                  >
+                    📁 Browse
+                  </Button>
+                </Box>
 
                 <FormControl fullWidth size="small">
                   <InputLabel id="project-type-label">Project Type</InputLabel>

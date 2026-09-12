@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, dialog } from 'electron'
 import { AppContainer } from '../di.js'
 
 export const registerIpcHandlers = (container: AppContainer): void => {
@@ -28,5 +28,15 @@ export const registerIpcHandlers = (container: AppContainer): void => {
 
   ipcMain.handle('getDependencies', async (_event, packageJsonPath: string) => {
     return dependencyService.getDependencies(packageJsonPath)
+  })
+
+  ipcMain.handle('selectFolder', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+    return result.filePaths[0]
   })
 }
