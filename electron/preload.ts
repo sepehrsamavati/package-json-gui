@@ -10,6 +10,7 @@ const api: IpcApi = {
     ipcRenderer.invoke('updateProject', id, type, structure),
   detectPackages: (projectPath: string) => ipcRenderer.invoke('detectPackages', projectPath),
   getDependencies: (packageJsonPath: string) => ipcRenderer.invoke('getDependencies', packageJsonPath),
+  selectFolder: () => ipcRenderer.invoke('selectFolder'),
 }
 
 contextBridge.exposeInMainWorld('ipcApi', api)
